@@ -105,6 +105,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     private Vibrator vibrator;
     private CardboardOverlayView overlayView;
 
+    private CardboardCube cube;
+
     /**
      * Converts a raw text file, saved as a resource, into an OpenGL ES shader.
      *
@@ -163,6 +165,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         cardboardView.setRenderer(this);
         setCardboardView(cardboardView);
 
+        cube = new CardboardCube(this);
         modelCube = new float[16];
         camera = new float[16];
         view = new float[16];
@@ -225,6 +228,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         cubeNormals.put(WorldLayoutData.CUBE_NORMALS);
         cubeNormals.position(0);
 
+
         // make a floor
         ByteBuffer bbFloorVertices =
             ByteBuffer.allocateDirect(WorldLayoutData.FLOOR_COORDS.length * 4);
@@ -256,6 +260,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         GLES20.glAttachShader(cubeProgram, passthroughShader);
         GLES20.glLinkProgram(cubeProgram);
         GLES20.glUseProgram(cubeProgram);
+
 
         checkGLError("Cube program");
 
@@ -301,6 +306,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.setIdentityM(modelCube, 0);
         Matrix.translateM(modelCube, 0, 0, 0, -objectDistance);
 
+        cube.onSurfaceCreated(config);
+
         Matrix.setIdentityM(modelFloor, 0);
         Matrix.translateM(modelFloor, 0, 0, -floorDepth, 0); // Floor appears below user.
 
@@ -340,6 +347,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         // Build the Model part of the ModelView matrix.
         Matrix.rotateM(modelCube, 0, TIME_DELTA, 0.5f, 0.5f, 1.0f);
 
+        cube.onNewFrame(headTransform);
+
         // Build the camera matrix and apply it to the ModelView.
         Matrix.setLookAtM(camera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
@@ -373,12 +382,16 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         Matrix.multiplyMM(modelViewProjection, 0, perspective, 0, modelView, 0);
         drawCube();
 
+        cube.onDrawEye(eye, view, lightPosInEyeSpace);
+
         // Set modelView for the floor, so we draw floor in the correct location
         Matrix.multiplyMM(modelView, 0, view, 0, modelFloor, 0);
         Matrix.multiplyMM(modelViewProjection, 0, perspective, 0,
                 modelView, 0);
         drawFloor();
     }
+
+
 
     @Override
     public void onFinishFrame(Viewport viewport) {
@@ -461,6 +474,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
         // Always give user feedback.
         vibrator.vibrate(50);
+
+        cube.onCardboardTrigger();
     }
 
     /**
