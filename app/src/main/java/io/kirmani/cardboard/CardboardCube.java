@@ -26,20 +26,13 @@ import javax.microedition.khronos.egl.EGLConfig;
 public class CardboardCube extends CardboardObject {
     private static final String TAG = "CardboardCube";
 
-    private FloatBuffer mFoundColors;
-
-    private static final float Z_NEAR = 0.1f;
-    private static final float Z_FAR = 100.0f;
-
     private static final float YAW_LIMIT = 0.12f;
     private static final float PITCH_LIMIT = 0.12f;
 
-    private static final int COORDS_PER_VERTEX = 3;
-
     private float[] mView;
     private float[] mHeadView;
-    private float[] mModelViewProjection;
-    private float[] mModelView;
+
+    private FloatBuffer mFoundColors;
 
     private int mScore;
     private float objectDistance = 12f;
@@ -48,11 +41,9 @@ public class CardboardCube extends CardboardObject {
     private Vibrator mVibrator;
     private CardboardOverlayView mOverlayView;
 
-    public CardboardCube(Activity activity) {
-        super(activity);
+    public CardboardCube(Activity activity, CardboardScene scene) {
+        super(activity, scene);
         setModel(new float[16]);
-        mModelViewProjection = new float[16];
-        mModelView = new float[16];
         mHeadView = new float[16];
         mVibrator = (Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
 
@@ -62,29 +53,30 @@ public class CardboardCube extends CardboardObject {
 
     @Override
     public void onSurfaceCreated(EGLConfig config) {
-        ByteBuffer bbVertices = ByteBuffer.allocateDirect(WorldLayoutData.CUBE_COORDS.length * 4);
+        super.onSurfaceCreated(config);
+        checkGLError("onSurfaceCreated");
+        ByteBuffer bbVertices = ByteBuffer.allocateDirect(CUBE_COORDS.length * 4);
         bbVertices.order(ByteOrder.nativeOrder());
         setVertices(bbVertices.asFloatBuffer());
-        getVertices().put(WorldLayoutData.CUBE_COORDS);
+        getVertices().put(CUBE_COORDS);
         getVertices().position(0);
 
-        ByteBuffer bbColors = ByteBuffer.allocateDirect(WorldLayoutData.CUBE_COLORS.length * 4);
+        ByteBuffer bbColors = ByteBuffer.allocateDirect(CUBE_COLORS.length * 4);
         bbColors.order(ByteOrder.nativeOrder());
         setColors(bbColors.asFloatBuffer());
-        getColors().put(WorldLayoutData.CUBE_COLORS);
+        getColors().put(CUBE_COLORS);
         getColors().position(0);
 
-        ByteBuffer bbFoundColors = ByteBuffer.allocateDirect(
-                WorldLayoutData.CUBE_FOUND_COLORS.length * 4);
+        ByteBuffer bbFoundColors = ByteBuffer.allocateDirect(CUBE_FOUND_COLORS.length * 4);
         bbFoundColors.order(ByteOrder.nativeOrder());
         mFoundColors = bbFoundColors.asFloatBuffer();
-        mFoundColors.put(WorldLayoutData.CUBE_FOUND_COLORS);
+        mFoundColors.put(CUBE_FOUND_COLORS);
         mFoundColors.position(0);
 
-        ByteBuffer bbNormals = ByteBuffer.allocateDirect(WorldLayoutData.CUBE_NORMALS.length * 4);
+        ByteBuffer bbNormals = ByteBuffer.allocateDirect(CUBE_NORMALS.length * 4);
         bbNormals.order(ByteOrder.nativeOrder());
         setNormals(bbNormals.asFloatBuffer());
-        getNormals().put(WorldLayoutData.CUBE_NORMALS);
+        getNormals().put(CUBE_NORMALS);
         getNormals().position(0);
 
         int vertexShader = loadGLShader(GLES20.GL_VERTEX_SHADER, R.raw.light_vertex);
@@ -115,21 +107,25 @@ public class CardboardCube extends CardboardObject {
 
         Matrix.setIdentityM(getModel(), 0);
         Matrix.translateM(getModel(), 0, 0, 0, -objectDistance);
+        checkGLError("onSurfaceCreated");
     }
 
     @Override
     public void onNewFrame(HeadTransform headTransform) {
+        super.onNewFrame(headTransform);
         Matrix.rotateM(getModel(), 0, TIME_DELTA, 0.5f, 0.5f, 1.0f);
         headTransform.getHeadView(mHeadView, 0);
     }
 
-    public void onDrawEye(Eye eye, float[] view, float[] lightPosInEyeSpace) {
+    @Override
+    public void onDrawEye(Eye eye) {
+        super.onDrawEye(eye);
         // Build the ModelView and ModelViewProjection matrices
         // for calculating cube position and light.
         float[] perspective = eye.getPerspective(Z_NEAR, Z_FAR);
-        Matrix.multiplyMM(mModelView, 0, view, 0, getModel(), 0);
-        Matrix.multiplyMM(mModelViewProjection, 0, perspective, 0, mModelView, 0);
-        draw(lightPosInEyeSpace);
+        Matrix.multiplyMM(getModelView(), 0, getView(), 0, getModel(), 0);
+        Matrix.multiplyMM(getModelViewProjection(), 0, perspective, 0, getModelView(), 0);
+        draw();
     }
 
     /**
@@ -137,23 +133,23 @@ public class CardboardCube extends CardboardObject {
      *
      * <p>We've set all of our transformation matrices. Now we simply pass them into the shader.
      */
-    public void draw(float[] lightPosInEyeSpace) {
+    public void draw() {
         GLES20.glUseProgram(getProgram());
 
-        GLES20.glUniform3fv(getLightPosParam(), 1, lightPosInEyeSpace, 0);
+        GLES20.glUniform3fv(getLightPosParam(), 1, getLightPosInEyeSpace(), 0);
 
         // Set the Model in the shader, used to calculate lighting
         GLES20.glUniformMatrix4fv(getModelParam(), 1, false, getModel(), 0);
 
         // Set the ModelView in the shader, used to calculate lighting
-        GLES20.glUniformMatrix4fv(getModelViewParam(), 1, false, mModelView, 0);
+        GLES20.glUniformMatrix4fv(getModelViewParam(), 1, false, getModelView(), 0);
 
         // Set the position of the cube
         GLES20.glVertexAttribPointer(getPositionParam(), COORDS_PER_VERTEX, GLES20.GL_FLOAT,
                 false, 0, getVertices());
 
         // Set the ModelViewProjection matrix in the shader.
-        GLES20.glUniformMatrix4fv(getModelViewProjectionParam(), 1, false, mModelViewProjection, 0);
+        GLES20.glUniformMatrix4fv(getModelViewProjectionParam(), 1, false, getModelViewProjection(), 0);
 
         // Set the normal positions of the cube, again for shading
         GLES20.glVertexAttribPointer(getNormalParam(), 3, GLES20.GL_FLOAT, false, 0, getNormals());
@@ -166,6 +162,7 @@ public class CardboardCube extends CardboardObject {
 
     @Override
     public void onCardboardTrigger() {
+        super.onCardboardTrigger();
         Log.i(TAG, "onCardboardTrigger");
 
         if (isLookingAtObject()) {
@@ -175,7 +172,6 @@ public class CardboardCube extends CardboardObject {
         } else {
             mOverlayView.show3DToast("Look around to find the object!");
         }
-        mOverlayView.show3DToast("You tapped the screen!");
 
         // Always give user feedback.
         mVibrator.vibrate(50);
@@ -220,12 +216,212 @@ public class CardboardCube extends CardboardObject {
         float[] objPositionVec = new float[4];
 
         // Convert object space to camera space. Use the headView from onNewFrame.
-        Matrix.multiplyMM(mModelView, 0, mHeadView, 0, getModel(), 0);
-        Matrix.multiplyMV(objPositionVec, 0, mModelView, 0, initVec, 0);
+        Matrix.multiplyMM(getModelView(), 0, mHeadView, 0, getModel(), 0);
+        Matrix.multiplyMV(objPositionVec, 0, getModelView(), 0, initVec, 0);
 
         float pitch = (float) Math.atan2(objPositionVec[1], -objPositionVec[2]);
         float yaw = (float) Math.atan2(objPositionVec[0], -objPositionVec[2]);
 
         return Math.abs(pitch) < PITCH_LIMIT && Math.abs(yaw) < YAW_LIMIT;
     }
+
+    public static final float[] CUBE_COORDS = new float[] {
+        // Front face
+        -1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, 1.0f,
+            1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+
+            // Right face
+            1.0f, 1.0f, 1.0f,
+            1.0f, -1.0f, 1.0f,
+            1.0f, 1.0f, -1.0f,
+            1.0f, -1.0f, 1.0f,
+            1.0f, -1.0f, -1.0f,
+            1.0f, 1.0f, -1.0f,
+
+            // Back face
+            1.0f, 1.0f, -1.0f,
+            1.0f, -1.0f, -1.0f,
+            -1.0f, 1.0f, -1.0f,
+            1.0f, -1.0f, -1.0f,
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, 1.0f, -1.0f,
+
+            // Left face
+            -1.0f, 1.0f, -1.0f,
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, 1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+            -1.0f, -1.0f, 1.0f,
+            -1.0f, 1.0f, 1.0f,
+
+            // Top face
+            -1.0f, 1.0f, -1.0f,
+            -1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, -1.0f,
+            -1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, -1.0f,
+
+            // Bottom face
+            1.0f, -1.0f, -1.0f,
+            1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+            1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, 1.0f,
+            -1.0f, -1.0f, -1.0f,
+    };
+
+    public static final float[] CUBE_COLORS = new float[] {
+        // front, green
+        0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+
+            // right, blue
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+
+            // back, also green
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+            0f, 0.5273f, 0.2656f, 1.0f,
+
+            // left, also blue
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+            0.0f, 0.3398f, 0.9023f, 1.0f,
+
+            // top, red
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+
+            // bottom, also red
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+            0.8359375f,  0.17578125f,  0.125f, 1.0f,
+    };
+
+    public static final float[] CUBE_FOUND_COLORS = new float[] {
+        // front, yellow
+        1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+
+            // right, yellow
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+
+            // back, yellow
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+
+            // left, yellow
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+
+            // top, yellow
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+
+            // bottom, yellow
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+            1.0f,  0.6523f, 0.0f, 1.0f,
+    };
+
+    public static final float[] CUBE_NORMALS = new float[] {
+        // Front face
+        0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, 1.0f,
+
+            // Right face
+            1.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f,
+            1.0f, 0.0f, 0.0f,
+
+            // Back face
+            0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, -1.0f,
+            0.0f, 0.0f, -1.0f,
+
+            // Left face
+            -1.0f, 0.0f, 0.0f,
+            -1.0f, 0.0f, 0.0f,
+            -1.0f, 0.0f, 0.0f,
+            -1.0f, 0.0f, 0.0f,
+            -1.0f, 0.0f, 0.0f,
+            -1.0f, 0.0f, 0.0f,
+
+            // Top face
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f,
+
+            // Bottom face
+            0.0f, -1.0f, 0.0f,
+            0.0f, -1.0f, 0.0f,
+            0.0f, -1.0f, 0.0f,
+            0.0f, -1.0f, 0.0f,
+            0.0f, -1.0f, 0.0f,
+            0.0f, -1.0f, 0.0f
+    };
 }

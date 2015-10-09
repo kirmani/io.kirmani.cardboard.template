@@ -26,6 +26,14 @@ import javax.microedition.khronos.egl.EGLConfig;
 public class CardboardObject {
     private static final String TAG = "CardboardObject";
 
+    protected static final float Z_NEAR = 0.1f;
+    protected static final float Z_FAR = 100.0f;
+    protected static final int COORDS_PER_VERTEX = 3;
+
+    private final float[] mLightPosInEyeSpace = new float[4];
+
+    private CardboardScene mScene;
+
     private Context mContext;
 
     private FloatBuffer mVertices;
@@ -44,8 +52,17 @@ public class CardboardObject {
 
     private float[] mModel;
 
-    public CardboardObject(Context context) {
+    public CardboardObject(Context context, CardboardScene scene) {
         mContext = context;
+        mScene = scene;
+    }
+
+    public void onRendererShutdown() {
+        Log.i(TAG, "onRendererShutdown");
+    }
+
+    public void onSurfaceChanged(int width, int height) {
+        Log.i(TAG, "onSurfaceChanged");
     }
 
     /**
@@ -65,6 +82,7 @@ public class CardboardObject {
      * @param headTransform The head transformation in the new frame.
      */
     public void onNewFrame(HeadTransform headTransform) {
+        checkGLError("onReadyToDraw");
     }
 
     /**
@@ -72,8 +90,7 @@ public class CardboardObject {
      *
      * @param eye The eye to render. Includes all required transformations.
      */
-    public void onDrawEye(Eye eye) {
-    }
+    public void onDrawEye(Eye eye) {}
 
     /**
      * Called when the Cardboard trigger is pulled.
@@ -91,6 +108,18 @@ public class CardboardObject {
 
     protected float[] getModel() {
         return mModel;
+    }
+
+    protected float[] getModelView() {
+        return mScene.getModelView();
+    }
+
+    protected float[] getModelViewProjection() {
+        return mScene.getModelViewProjection();
+    }
+
+    protected float[] getView() {
+        return mScene.getView();
     }
 
     protected void setVertices(FloatBuffer vertices) {
@@ -179,6 +208,10 @@ public class CardboardObject {
 
     protected int getLightPosParam() {
         return mLightPosParam;
+    }
+
+    protected float[] getLightPosInEyeSpace() {
+        return mLightPosInEyeSpace;
     }
 
     /**
